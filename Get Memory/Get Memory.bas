@@ -2,7 +2,7 @@ Attribute VB_Name = "GetMemoryModule"
 'This module contains this program's main interface.
 Option Explicit
 
-'The Microsoft Windows API constants, functions and structures used by this program:
+'Defines the Microsoft Windows API constants, functions and structures used by this program:
 Private Const ERROR_IO_PENDING As Long = 997
 Private Const ERROR_SUCCESS As Long = 0
 Private Const FORMAT_MESSAGE_FROM_SYSTEM As Long = &H1000&
@@ -66,8 +66,8 @@ Private Declare Function OpenProcessToken Lib "Advapi32.dll" (ByVal ProcessH As 
 Private Declare Function ReadProcessMemory Lib "Kernel32.dll" (ByVal hProcess As Long, ByVal lpBaseAddress As Long, ByVal lpBuffer As String, ByVal nSize As Long, lpNumberOfBytesRead As Long) As Long
 Private Declare Function VirtualQueryEx Lib "Kernel32.dll" (ByVal hProcess As Long, ByVal lpAddress As Long, lpBuffer As MEMORY_BASIC_INFORMATION, ByVal dwLength As Long) As Long
 
-'The constants and events used by this program:
-Private Const MAX_STRING As Long = 65535   'The maximum number of characters used for a string buffer.
+'Defines the constants and events used by this program:
+Private Const MAX_STRING As Long = 65535   'Defines the maximum number of characters used for a string buffer.
 Private Const NO_PROCESS As Long = 0       'Indicates that no process is being viewed.
 
 
@@ -148,18 +148,18 @@ End Sub
 'This procedure is executed when this program starts.
 Private Sub Main()
 On Error GoTo ErrorTrap
-Dim Process As String
 Dim ProcessId As Long
+Dim ProcessPath As String
 
    ChDrive Left$(App.Path, InStr(App.Path, ":"))
    ChDir App.Path
    
-   Process = InputBox$("Path or process id (prefixed with ""*""):")
-   If Not Process = Empty Then
-      If Left$(Process, 1) = "*" Then
-         ProcessId = CLng(Val(Mid$(Process, 2)))
+   ProcessPath = InputBox$("Path or process id (prefixed with ""*""):")
+   If Not ProcessPath = vbNullString Then
+      If Left$(ProcessPath, 1) = "*" Then
+         ProcessId = CLng(Val(Mid$(ProcessPath, 2)))
       Else
-         ProcessId = Shell(Process)
+         ProcessId = Shell(ProcessPath)
       End If
    
       If Not ProcessId = NO_PROCESS Then GetMemory ProcessId

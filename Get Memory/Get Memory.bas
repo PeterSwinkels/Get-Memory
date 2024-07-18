@@ -55,7 +55,6 @@ Private Type TOKEN_PRIVILEGES
    Privileges(1) As LUID_AND_ATTRIBUTES
 End Type
 
-Private Declare Sub GetSystemInfo Lib "Kernel32.dll" (lpSystemInfo As SYSTEM_INFO)
 Private Declare Function AdjustTokenPrivileges Lib "Advapi32.dll" (ByVal TokenHandle As Long, ByVal DisableAllPrivileges As Long, NewState As TOKEN_PRIVILEGES, ByVal BufferLength As Long, PreviousState As TOKEN_PRIVILEGES, ReturnLength As Long) As Long
 Private Declare Function CloseHandle Lib "Kernel32.dll" (ByVal hObject As Long) As Long
 Private Declare Function FormatMessageA Lib "Kernel32.dll" (ByVal dwFlags As Long, lpSource As Long, ByVal dwMessageId As Long, ByVal dwLanguageId As Long, ByVal lpBuffer As String, ByVal nSize As Long, Arguments As Long) As Long
@@ -65,6 +64,7 @@ Private Declare Function OpenProcess Lib "Kernel32.dll" (ByVal dwDesiredAccess A
 Private Declare Function OpenProcessToken Lib "Advapi32.dll" (ByVal ProcessH As Long, ByVal DesiredAccess As Long, TokenHandle As Long) As Long
 Private Declare Function ReadProcessMemory Lib "Kernel32.dll" (ByVal hProcess As Long, ByVal lpBaseAddress As Long, ByVal lpBuffer As String, ByVal nSize As Long, lpNumberOfBytesRead As Long) As Long
 Private Declare Function VirtualQueryEx Lib "Kernel32.dll" (ByVal hProcess As Long, ByVal lpAddress As Long, lpBuffer As MEMORY_BASIC_INFORMATION, ByVal dwLength As Long) As Long
+Private Declare Sub GetSystemInfo Lib "Kernel32.dll" (lpSystemInfo As SYSTEM_INFO)
 
 'Defines the constants and events used by this program:
 Private Const MAX_STRING As Long = 65535   'Defines the maximum number of characters used for a string buffer.
@@ -73,34 +73,44 @@ Private Const NO_PROCESS As Long = 0       'Indicates that no process is being v
 
 'This procedure checks whether an error has occurred during the most recent Windows API call.
 Private Function CheckForError(ReturnValue As Long, Optional Ignored As Long = ERROR_SUCCESS) As Long
-Dim Description As String
 Dim ErrorCode As Long
 Dim Length As Long
+Dim Message As String
+Static SuppressAPIErrors As Boolean
 
    ErrorCode = Err.LastDllError
    Err.Clear
    
+   On Error GoTo ErrorTrap
+   
    If Not (ErrorCode = ERROR_SUCCESS Or ErrorCode = Ignored) Then
-      Description = String$(MAX_STRING, vbNullChar)
-      Length = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM Or FORMAT_MESSAGE_IGNORE_INSERTS, ByVal CLng(0), ErrorCode, CLng(0), Description, Len(Description), CLng(0))
+      Message = String$(MAX_STRING, vbNullChar)
+      Length = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM Or FORMAT_MESSAGE_IGNORE_INSERTS, ByVal CLng(0), ErrorCode, CLng(0), Message, Len(Message), CLng(0))
       If Length = 0 Then
-         Description = "No description."
+         Message = "No description."
       ElseIf Length > 0 Then
-         Description = Left$(Description, Length - 1)
+         Message = Left$(Message, Length - 1)
       End If
    
-      Description = Description & "API Error code: " & CStr(ErrorCode) & vbCr
-      Description = Description & "Return value: " & CStr(ReturnValue)
-      
-      MsgBox Description, vbExclamation
+      Message = Message & "API Error code: " & CStr(ErrorCode) & vbCr
+      Message = Message & "Return value: " & CStr(ReturnValue) & vbCr & vbCr
+      Message = Message & "Continue displaying API error messages?"
+      If Not SuppressAPIErrors Then SuppressAPIErrors = (MsgBox(Message, vbYesNo Or vbExclamation) = vbNo)
    End If
    
+EndProcedure:
    CheckForError = ReturnValue
+   Exit Function
+   
+ErrorTrap:
+   If HandleError() = vbIgnore Then Resume EndProcedure
+   If HandleError(ReturnPreviousChoice:=True) = vbIgnore Then Resume
 End Function
 
 
 'This procedure writes the memory contents of the selected process to a file.
 Private Sub GetMemory(ProcessId As Long)
+On Error GoTo ErrorTrap
 Dim Buffer As String
 Dim BytesRead As Long
 Dim FileH As Long
@@ -142,7 +152,31 @@ Dim SystemInformation As SYSTEM_INFO
       SetPrivilege SE_DEBUG_NAME, SE_PRIVILEGE_DISABLED
       Screen.MousePointer = vbDefault
    End If
+   
+EndProcedure:
+   Exit Sub
+   
+ErrorTrap:
+   If HandleError() = vbIgnore Then Resume EndProcedure
+   If HandleError(ReturnPreviousChoice:=True) = vbIgnore Then Resume
 End Sub
+'This procedure handles any errors that occur.
+Public Function HandleError(Optional ReturnPreviousChoice As Boolean = False) As Long
+Dim Description As String
+Dim ErrorCode As Long
+Static Choice As Long
+
+   Description = Err.Description
+   ErrorCode = Err.Number
+   On Error Resume Next
+   If Not ReturnPreviousChoice Then
+      Choice = MsgBox(Description & "." & vbCr & "Error code: " & CStr(ErrorCode), vbAbortRetryIgnore Or vbDefaultButton2 Or vbExclamation)
+   End If
+   
+   If Choice = vbAbort Then End
+   
+   HandleError = Choice
+End Function
 
 
 'This procedure is executed when this program starts.
@@ -165,17 +199,18 @@ Dim ProcessPath As String
       If Not ProcessId = NO_PROCESS Then GetMemory ProcessId
    End If
    
-EndRoutine:
+EndProcedure:
    Exit Sub
    
 ErrorTrap:
-   MsgBox "Error: " & CStr(Err.Number) & vbCr & Err.Description, vbExclamation
-   Resume EndRoutine
+   If HandleError() = vbIgnore Then Resume EndProcedure
+   If HandleError(ReturnPreviousChoice:=True) = vbIgnore Then Resume
 End Sub
 
 
 'This procedure disables/enables the specified privilege for the current process.
 Private Sub SetPrivilege(PrivilegeName As String, Status As Long)
+On Error GoTo ErrorTrap
 Dim Length As Long
 Dim NewPrivileges As TOKEN_PRIVILEGES
 Dim PreviousPrivileges As TOKEN_PRIVILEGES
@@ -196,5 +231,12 @@ Dim TokenH As Long
       End If
       CheckForError CloseHandle(TokenH)
    End If
+
+EndProcedure:
+   Exit Sub
+   
+ErrorTrap:
+   If HandleError() = vbIgnore Then Resume EndProcedure
+   If HandleError(ReturnPreviousChoice:=True) = vbIgnore Then Resume
 End Sub
 

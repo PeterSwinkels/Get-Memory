@@ -104,7 +104,7 @@ EndProcedure:
    
 ErrorTrap:
    If HandleError() = vbIgnore Then Resume EndProcedure
-   If HandleError(ReturnPreviousChoice:=True) = vbIgnore Then Resume
+   If HandleError(ReturnPreviousChoice:=True) = vbRetry Then Resume
 End Function
 
 
@@ -158,7 +158,7 @@ EndProcedure:
    
 ErrorTrap:
    If HandleError() = vbIgnore Then Resume EndProcedure
-   If HandleError(ReturnPreviousChoice:=True) = vbIgnore Then Resume
+   If HandleError(ReturnPreviousChoice:=True) = vbRetry Then Resume
 End Sub
 'This procedure handles any errors that occur.
 Public Function HandleError(Optional ReturnPreviousChoice As Boolean = False) As Long
@@ -204,7 +204,7 @@ EndProcedure:
    
 ErrorTrap:
    If HandleError() = vbIgnore Then Resume EndProcedure
-   If HandleError(ReturnPreviousChoice:=True) = vbIgnore Then Resume
+   If HandleError(ReturnPreviousChoice:=True) = vbRetry Then Resume
 End Sub
 
 
@@ -237,6 +237,6 @@ EndProcedure:
    
 ErrorTrap:
    If HandleError() = vbIgnore Then Resume EndProcedure
-   If HandleError(ReturnPreviousChoice:=True) = vbIgnore Then Resume
+   If HandleError(ReturnPreviousChoice:=True) = vbRetry Then Resume
 End Sub
 

@@ -3,7 +3,9 @@ Attribute VB_Name = "GetMemoryModule"
 Option Explicit
 
 'Defines the Microsoft Windows API constants, functions and structures used by this program:
+Private Const ERROR_INVALID_PARAMETER As Long = 87
 Private Const ERROR_IO_PENDING As Long = 997
+Private Const ERROR_PARTIAL_COPY As Long = 299
 Private Const ERROR_SUCCESS As Long = 0
 Private Const FORMAT_MESSAGE_FROM_SYSTEM As Long = &H1000&
 Private Const FORMAT_MESSAGE_IGNORE_INSERTS As Long = &H200&
@@ -59,6 +61,7 @@ Private Declare Function AdjustTokenPrivileges Lib "Advapi32.dll" (ByVal TokenHa
 Private Declare Function CloseHandle Lib "Kernel32.dll" (ByVal hObject As Long) As Long
 Private Declare Function FormatMessageA Lib "Kernel32.dll" (ByVal dwFlags As Long, lpSource As Long, ByVal dwMessageId As Long, ByVal dwLanguageId As Long, ByVal lpBuffer As String, ByVal nSize As Long, Arguments As Long) As Long
 Private Declare Function GetCurrentProcess Lib "Kernel32.dll" () As Long
+Private Declare Function IsWow64Process Lib "Kernel32.dll" (ByVal hProcess As Long, ByRef Wow64Process As Long) As Long
 Private Declare Function LookupPrivilegeValueA Lib "Advapi32.dll" (ByVal lpSystemName As String, ByVal lpName As String, lpLuid As LUID) As Long
 Private Declare Function OpenProcess Lib "Kernel32.dll" (ByVal dwDesiredAccess As Long, ByVal bInheritHandle As Long, ByVal dwProcessId As Long) As Long
 Private Declare Function OpenProcessToken Lib "Advapi32.dll" (ByVal ProcessH As Long, ByVal DesiredAccess As Long, TokenHandle As Long) As Long
@@ -108,6 +111,23 @@ ErrorTrap:
 End Function
 
 
+'This procedure displays a warning if the specified handle refers to a 64-bit process.
+Private Sub CheckIs64Bit(ProcessH As Long)
+On Error GoTo ErrorTrap
+Dim Is64Wow As Long
+
+   CheckForError IsWow64Process(ProcessH, Is64Wow)
+   If Not CBool(Is64Wow) Then MsgBox "This program is designed for 32-bit processes.", vbExclamation
+
+EndProcedure:
+   Exit Sub
+   
+ErrorTrap:
+   If HandleError() = vbIgnore Then Resume EndProcedure
+   If HandleError(ReturnPreviousChoice:=True) = vbRetry Then Resume
+End Sub
+
+
 'This procedure writes the memory contents of the selected process to a file.
 Private Sub GetMemory(ProcessId As Long)
 On Error GoTo ErrorTrap
@@ -127,18 +147,20 @@ Dim SystemInformation As SYSTEM_INFO
       GetSystemInfo SystemInformation
       ProcessH = CheckForError(OpenProcess(PROCESS_VM_READ Or PROCESS_QUERY_INFORMATION, CLng(False), ProcessId))
       If Not ProcessH = NO_PROCESS Then
+         CheckIs64Bit ProcessH
+
          FileH = FreeFile()
-         Open CStr(ProcessId) & ".dat" For Output As FileH
+         Open CStr(ProcessId) & ".dat" For Output Lock Read Write As FileH
             Offset = SystemInformation.lpMinimumApplicationAddress
             Do While Offset <= SystemInformation.lpMaximumApplicationAddress
-               ReturnValue = CheckForError(VirtualQueryEx(ProcessH, Offset, MemoryBasicInformation, Len(MemoryBasicInformation)))
+               ReturnValue = CheckForError(VirtualQueryEx(ProcessH, Offset, MemoryBasicInformation, Len(MemoryBasicInformation)), Ignored:=ERROR_INVALID_PARAMETER)
                If ReturnValue = 0 Then Exit Do
                
                If Not (MemoryBasicInformation.Protect And PAGE_GUARD) = PAGE_GUARD Then
                   If MemoryBasicInformation.lType = MEM_PRIVATE Then
                      If MemoryBasicInformation.State = MEM_COMMIT Then
                         Buffer = String$(MemoryBasicInformation.RegionSize, vbNullChar)
-                        ReturnValue = CheckForError(ReadProcessMemory(ProcessH, Offset, Buffer, Len(Buffer), BytesRead))
+                        ReturnValue = CheckForError(ReadProcessMemory(ProcessH, Offset, Buffer, Len(Buffer), BytesRead), Ignored:=ERROR_PARTIAL_COPY)
                         If Not ReturnValue = 0 Then Print #FileH, Left$(Buffer, BytesRead);
                      End If
                   End If
@@ -146,7 +168,7 @@ Dim SystemInformation As SYSTEM_INFO
                Offset = MemoryBasicInformation.BaseAddress + MemoryBasicInformation.RegionSize
             Loop
          Close FileH
-         CheckForError CloseHandle(ProcessH)
+         CheckForError CloseHandle(ProcessH), Ignored:=ERROR_INVALID_PARAMETER
       End If
       
       SetPrivilege SE_DEBUG_NAME, SE_PRIVILEGE_DISABLED
